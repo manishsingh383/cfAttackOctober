@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>commonfloor</title>
+
+	<meta name="viewport" content="height=device-height, width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=0" />
+	<link rel="shortcut icon" href="images/cf.ico">
+	<link href="css/bootstrap/bootstrap.css" rel="stylesheet">
+	<link href="css/locality.css" rel="stylesheet">
+	<script type="text/javascript" src="https://maps.googleapis.com/maps/api/js?v=3.13&libraries=places,geometry,visualization&sensor=true&language=en"></script>
+	<script src="https://code.jquery.com/jquery-1.11.3.min.js"></script>
+	<script src="/js/turf.min.js"></script>
+	<link href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.0/css/select2.min.css" rel="stylesheet" />
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.0/js/select2.min.js"></script>
+	<script type="text/javascript" src="https://www.parsecdn.com/js/parse-1.2.13.min.js"></script>
+	<script>
+		var zones;
+		var localities;
+		var map;
+		var infowindow = new google.maps.InfoWindow({});
+		var zoneLocality=[[],[],[],[],[]];
+		var mappedLocalities=[];
+		var zonePolygons=[];
+		function initializeMap(){
+			for (var i = 0; i < zones.length; i++) {
+        loadZone(zones[i],i);
+        var polygonEncoded=zones[i].get('polygonEncoded');
+      	var zoneDecodedPath = google.maps.geometry.encoding.decodePath(polygonEncoded);
+        var zonePolygon = {
+				  "type": "Feature",
+				  "geometry": {
+				    "type": "Polygon",
+				    "coordinates": [[
+				    ]]
+				  }
+				};
+				zoneDecodedPath.forEach(function(location) {
+      		zonePolygon.geometry.coordinates[0].push([location.lng(), location.lat()]);	
+      	});
+				var count=0;
+	      for (var j = 0; j < localities.length; j++) {
+	      	var localityData=localities[j];
+	      	var name=localityData.get("localityName");
+	      	var polygonEncoded=localityData.get('polygon_encoded');
+	      	var decodedPath = google.maps.geometry.encoding.decodePath(polygonEncoded);
+	      	var localityPolygon = {
+					  "type": "Feature",
+					  "geometry": {
+					    "type": "Polygon",
+					    "coordinates": [[
+					    ]]
+					  }
+					};
+	      	decodedPath.forEach(function(location) {
+	      		localityPolygon.geometry.coordinates[0].push([location.lng(), location.lat()]);	
+	      	});
+	      	localityPolygon.geometry.coordinates[0].push(localityPolygon.geometry.coordinates[0][0]);	
+	      	var tolerance = 0.0001;
+					var zonePolygonSimplified = turf.simplify(zonePolygon, tolerance, false);
+					var localityPolygonSimplified = turf.simplify(localityPolygon, tolerance, false);
+	      	try {
+		      	var intersection = turf.intersect(zonePolygonSimplified, localityPolygonSimplified);		      	
+		      	if(intersection){
+		      		mappedLocalities.push(name);
+		      		zoneLocality[i].push(localityData);
+		      	}
+	      	} catch(e){	      		
+	      	}	      	
+	      }
+      }
+      var west=[];
+      for (var j = 0; j < localities.length; j++) {
+      	var localityData=localities[j];
+      	var name=localityData.get("localityName");
+      	var found=false;
+      	for(var k=0;k<mappedLocalities.length;k++){
+      		if(name===mappedLocalities[k]){
+      			found=true;
+      		}
+      	}
+      	if(!found){
+      		west.push(localityData);	
+      	}
+      }
+      zoneLocality[3]=west;      
+		}
+		function decodeLevels(encodedLevelsString) {
+	    var decodedLevels = [];
+	    for (var i = 0; i < encodedLevelsString.length; ++i) {
+	        var level = encodedLevelsString.charCodeAt(i) - 63;
+	        decodedLevels.push(level);
+	    }
+	    return decodedLevels;
+		}
+		function loadLocalities(index){
+			zoneLocality[index].forEach(function(locality){				
+				var polygonEncoded=locality.get('polygon_encoded');
+	      var decodedPath = google.maps.geometry.encoding.decodePath(polygonEncoded);
+	    	var decodedLevels = decodeLevels("BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB");
+	    	var polygon=new google.maps.Polygon({
+	        paths: decodedPath,
+					map: map,	   
+	        strokeColor: 'orange',
+	        strokeOpacity: 0.8,
+	        strokeWeight: 1.5,
+	        fillColor: 'yellow',
+	        fillOpacity: 0.4
+		    });
+		    google.maps.event.addListener(polygon, 'click', function (event) {
+		    	appendTags(locality.get('localityName'));
+		    });
+		    google.maps.event.addListener(polygon, 'mouseover', function (event) {
+		    	polygon.setOptions({fillColor: "orange"});        	
+		    	infowindow.setContent("<a href='"+"' target='_blank'><b>"+locality.get("localityName")+"</b></a>");
+        	infowindow.setPosition(event.latLng);
+        	infowindow.open(map);
+      	});
+      	google.maps.event.addListener(polygon, 'mouseout', function (event) {
+		    	polygon.setOptions({fillColor: "yellow"});        	
+		    	infowindow.close();
+      	});
+			})
+		}
+		function appendTags(value){
+	    $('.multiseelctUl').append('<li>'+value+'</li>');
+	  }
+		function loadZone(zoneData, index) {
+      var zoneName=zoneData.get("zoneName");
+      var polygonEncoded=zoneData.get('polygonEncoded');
+      var decodedPath = google.maps.geometry.encoding.decodePath(polygonEncoded);
+    	var decodedLevels = decodeLevels("BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB");
+    	var zonePolygon = new google.maps.Polygon({
+        paths: decodedPath,	        
+        	strokeColor: 'black',
+	        strokeOpacity: 0.8,
+	        strokeWeight: 1.5,
+	        fillColor: 'orange',
+	        fillOpacity: 0.4
+	    });
+	    zonePolygons.push(zonePolygon);
+	    google.maps.event.addListener(zonePolygon, 'mouseover', function (event) {
+        infowindow.setContent("<a href='"+"' target='_blank'><b>"+zoneName+"</b></a>");
+        infowindow.setPosition(event.latLng);
+        infowindow.open(map);
+      });
+      google.maps.event.addListener(zonePolygon, 'click', function (event) {
+      	zonePolygons.forEach(function(polygon){
+      		polygon.setMap(null);
+      	})
+      	infowindow.close();
+      	map.setZoom(11);
+      	loadLocalities(index);
+      });
+	    zonePolygon.setMap(map);
+    }
+		function initialize() {
+		  var mapProp = {
+		    center:new google.maps.LatLng(12.964369, 77.586308),
+		    zoom:10,
+		    mapTypeId:google.maps.MapTypeId.ROADMAP
+		  };
+		  map=new google.maps.Map(document.getElementById("googleMap"),mapProp);
+		  Parse.initialize("3nP5Zdd4wy72HWQMfCl1OQcBv7iok8d5NPVRlYN5", "ZA9mcuwRZMa0yzJXvBQQ294rKu7vnjXed50JJRjU");
+		  var Zone = Parse.Object.extend("Zone");
+      var query = new Parse.Query(Zone);
+      query.find({
+        success: function(results) {
+        	zones=results;
+      		var MapLocality = Parse.Object.extend("MapLocality");
+		      var query2 = new Parse.Query(MapLocality);
+		      query2.limit(250);
+		      query2.find({
+		      	success: function(localityData){
+		      		localities=localityData;
+		      		initializeMap();
+		      	},
+        	});
+        },
+        error: function(error) {
+          alert("Error: " + error.code + " " + error.message);
+        }
+     	});
+    }
+		
+	</script>	
+</head>
+<body>
+	<div class="container-fluid">
+		<div class="row background">
+			<div class="col-md-12 ontopData">
+				<div class="col-md-12 topContent">
+					<div class="logo">
+						<center>
+							<a href="http://www.commonfloor.com">
+								<img src="../images/logo.png">
+							</a>
+						</center>
+						<button class="pull-right">Login</button>
+						<h1>CommonFloor. You are Home.</h1>
+					</div>
+				</div>
+				<div class="col-md-12 contentWrapper">
+					<div class="col-md-5 map">
+						<div  id="googleMap"></div>
+					</div>
+					<div class="col-md-7 search">
+						<h2>Find your dream property in Bangalore</h2>
+						<h5>All property listings for sale or rent in bangalore</h5>
+						<div class="col-md-12 wrapSearch">
+							<div class="col-md-2 forsalerent">
+								<button class="btn btn-default">Sale</button>
+								<button class="btn btn-default">Rent</button>
+							</div>
+							<div class="col-md-10 filter">
+								<ul>
+									<li>Homes</li>
+									<li>Commercial</li>
+									<li>land</li>
+									<li>other</li>
+									<li>new Bulls</li>
+									<li>student</li>
+								</ul>
+								<div class="multiselectTextBoxWrap">
+									<ul class="multiseelctUl">
+									</ul>
+									<input disabled class="inputText" type="text" placeholder="">
+								</div>
+								
+								<div class="col-md-12 row priceArea">
+									<div class="col-md-3 row">
+										<input class="" type="text" placeholder=" Price min ">
+									</div>
+									<div class="col-md-3" style="margin-left:20px;">
+										<input class="" type="text" placeholder="Price max">
+									</div>
+									<div class="col-md-3">
+										<select>
+											<option>property type</option>
+										</select>
+									</div>
+									<div class="col-md-3">
+										<center>
+											<button class="searchBtn btn">Search</button>
+										</center>
+									</div>
+								</div>
+								
+							</div>
+						</div>
+					</div>	
+				</div>
+			</div>
+		</div>
+		
+	</div>
+	<script src="/js/lib/jquery.js" ></script>
+	<script src="/js/lib/bootstrap.js" ></script>
+	<script src="/js/locality.js" ></script>
+	
+</body>
+</html>
